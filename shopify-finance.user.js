@@ -71,12 +71,37 @@
             const data = JSON.parse(body);
             const name = data?.order?.customer?.first_name + ' ' + data?.order?.customer?.last_name;
             console.log(`[TaxAdvisor] Row ${i}: customer name:`, name);
-            newTd.textContent = name && name !== 'undefined undefined' ? name.trim() : '—';
+            newTd.textContent = '';
+            const copyBtn = document.createElement('span');
+            copyBtn.textContent = '📋';
+            copyBtn.style.cursor = 'pointer';
+            copyBtn.style.marginRight = '4px';
+            copyBtn.addEventListener('click', () => {
+              navigator.clipboard.writeText(name.trim()).then(() => copyBtn.textContent = '✅');
+              setTimeout(() => copyBtn.textContent = '📋', 1500);
+            });
+            newTd.appendChild(copyBtn);
+            newTd.appendChild(document.createTextNode(name.trim()));
           } catch (e) {
             console.log(`[TaxAdvisor] Row ${i}: not JSON, trying regex`);
             const match = body.match(/"first_name"\s*:\s*"([^"]+)".*?"last_name"\s*:\s*"([^"]+)"/);
             console.log(`[TaxAdvisor] Row ${i}: regex match:`, match);
-            newTd.textContent = match ? (match[1] + ' ' + match[2]).trim() : '—';
+            const fallbackName = match ? (match[1] + ' ' + match[2]).trim() : null;
+            if (fallbackName) {
+              newTd.textContent = '';
+              const copyBtn2 = document.createElement('span');
+              copyBtn2.textContent = '📋';
+              copyBtn2.style.cursor = 'pointer';
+              copyBtn2.style.marginRight = '4px';
+              copyBtn2.addEventListener('click', () => {
+                navigator.clipboard.writeText(fallbackName).then(() => copyBtn2.textContent = '✅');
+                setTimeout(() => copyBtn2.textContent = '📋', 1500);
+              });
+              newTd.appendChild(copyBtn2);
+              newTd.appendChild(document.createTextNode(fallbackName));
+            } else {
+              newTd.textContent = '—';
+            }
           }
         })
         .catch((err) => {
@@ -86,12 +111,57 @@
     });
   }
 
+  function addExportButton() {
+    const exportBtn = Array.from(document.querySelectorAll('.Polaris-Button'))
+      .find((btn) => btn.textContent.trim() === 'Export');
+    if (!exportBtn || document.getElementById('tax-advisor-export')) return;
+
+    const customBtn = exportBtn.cloneNode(true);
+    customBtn.id = 'tax-advisor-export';
+    customBtn.querySelector('span')
+      ? (customBtn.querySelector('span').textContent = 'Custom Export')
+      : (customBtn.textContent = 'Custom Export');
+    customBtn.style.marginLeft = '8px';
+
+    customBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const rows = document.querySelectorAll('table tbody tr');
+      const names = [];
+      rows.forEach((tr) => {
+        const cells = tr.querySelectorAll('td.Polaris-IndexTable__TableCell');
+        // The inserted name cell is after the second td (index 2)
+        if (cells.length > 2) {
+          const name = cells[2].textContent.trim();
+          if (name && name !== '⏳' && name !== '—' && name !== '❌' && name !== '⏰') {
+            names.push(name);
+          }
+        }
+      });
+
+      const csv = 'Name\n' + names.map((n) => '"' + n.replace(/"/g, '""') + '"').join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'tax-advisor-export.csv';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      console.log('[TaxAdvisor] Exported', names.length, 'names');
+    });
+
+    exportBtn.parentNode.insertBefore(customBtn, exportBtn.nextSibling);
+    console.log('[TaxAdvisor] Custom Export button added');
+  }
+
   // Delay to let Shopify SPA render the page
   console.log('[TaxAdvisor] Script loaded, waiting 3s...');
   setTimeout(() => {
     console.log('[TaxAdvisor] Starting...');
-    const observer = new MutationObserver(processTable);
+    const observer = new MutationObserver(() => {
+      processTable();
+      addExportButton();
+    });
     observer.observe(document.body, { childList: true, subtree: true });
     processTable();
+    addExportButton();
   }, 3000);
 })();
