@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Shopify Finance - TaxAdvisor
 // @namespace    tax-advisor
-// @version      0.1.4.1
+// @version      0.1.5.1
 // @description  Adds extra column to Shopify Finance table
 // @match        https://admin.shopify.com/store/soloair-de/payments/payouts/*
 // @grant        none
@@ -9,6 +9,22 @@
 
 (function () {
   'use strict';
+
+  function addTableHeader() {
+    const headerRow = document.querySelector('table thead tr');
+    if (!headerRow || headerRow.dataset.taxAdvisorHeader) return;
+    headerRow.dataset.taxAdvisorHeader = 'true';
+
+    const ths = headerRow.querySelectorAll('th');
+    if (ths.length < 2) return;
+
+    const newTh = document.createElement('th');
+    newTh.className = 'Polaris-IndexTable__TableHeading Polaris-IndexTable__TableHeading--unselectable';
+    newTh.setAttribute('data-index-table-heading', 'true');
+    newTh.innerHTML = '<span class="Polaris-Text--root Polaris-Text--bodySm Polaris-Text--medium">Customer Name</span>';
+    ths[1].after(newTh);
+    console.log('[TaxAdvisor] Header added');
+  }
 
   function processTable() {
     console.log('[TaxAdvisor] processTable called');
@@ -139,7 +155,7 @@
           : date;
         const type = cells[3].textContent.trim();
         const name = cells[2].textContent.replace('📋', '').replace('✅', '').trim();
-        const amount = cells[7].textContent.trim().replace(/[€EUR\s]/g, '');
+        const amount = cells[5].textContent.trim().replace(/[€EUR\s]/g, '');
         if (name && name !== '⏳' && name !== '—' && name !== '❌' && name !== '⏰') {
           csvRows.push(formattedDate + ',' + type + ',' + name + ',' + amount);
         }
@@ -164,10 +180,12 @@
   setTimeout(() => {
     console.log('[TaxAdvisor] Starting...');
     const observer = new MutationObserver(() => {
+      addTableHeader();
       processTable();
       addExportButton();
     });
     observer.observe(document.body, { childList: true, subtree: true });
+    addTableHeader();
     processTable();
     addExportButton();
   }, 3000);
