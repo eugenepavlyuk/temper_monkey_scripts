@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Shopify Finance - TaxAdvisor
 // @namespace    tax-advisor
-// @version      0.1.1
+// @version      0.1.2.1
 // @description  Adds extra column to Shopify Finance table
 // @match        https://admin.shopify.com/store/soloair-de/payments/payouts/*
 // @grant        none
@@ -126,26 +126,26 @@
     customBtn.addEventListener('click', (e) => {
       e.preventDefault();
       const rows = document.querySelectorAll('table tbody tr');
-      const names = [];
+      const csvRows = ['Transaction Date,Customer Name,Amount'];
       rows.forEach((tr) => {
         const cells = tr.querySelectorAll('td.Polaris-IndexTable__TableCell');
-        // The inserted name cell is after the second td (index 2)
-        if (cells.length > 2) {
-          const name = cells[2].textContent.trim();
-          if (name && name !== '⏳' && name !== '—' && name !== '❌' && name !== '⏰') {
-            names.push(name);
-          }
+        if (cells.length < 8) return;
+        const date = cells[0].textContent.trim();
+        const name = cells[2].textContent.replace('📋', '').replace('✅', '').trim();
+        const amount = cells[7].textContent.trim().replace(/[€EUR\s]/g, '');
+        if (name && name !== '⏳' && name !== '—' && name !== '❌' && name !== '⏰') {
+          csvRows.push('"' + date.replace(/"/g, '""') + '","' + name.replace(/"/g, '""') + '","' + amount.replace(/"/g, '""') + '"');
         }
       });
 
-      const csv = 'Name\n' + names.map((n) => '"' + n.replace(/"/g, '""') + '"').join('\n');
+      const csv = csvRows.join('\n');
       const blob = new Blob([csv], { type: 'text/csv' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = 'tax-advisor-export.csv';
       a.click();
       URL.revokeObjectURL(a.href);
-      console.log('[TaxAdvisor] Exported', names.length, 'names');
+      console.log('[TaxAdvisor] Exported', csvRows.length - 1, 'rows');
     });
 
     exportBtn.parentNode.insertBefore(customBtn, exportBtn.nextSibling);
