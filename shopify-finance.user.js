@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Shopify Finance - TaxAdvisor
 // @namespace    tax-advisor
-// @version      0.1
+// @version      0.1.1
 // @description  Adds extra column to Shopify Finance table
 // @match        https://admin.shopify.com/store/soloair-de/payments/payouts/*
 // @grant        none
