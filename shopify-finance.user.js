@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Shopify Finance - TaxAdvisor
 // @namespace    tax-advisor
-// @version      0.1.3.1
+// @version      0.1.4.1
 // @description  Adds extra column to Shopify Finance table
 // @match        https://admin.shopify.com/store/soloair-de/payments/payouts/*
 // @grant        none
@@ -131,11 +131,17 @@
         const cells = tr.querySelectorAll('td.Polaris-IndexTable__TableCell');
         if (cells.length < 8) return;
         const date = cells[0].textContent.trim();
+        const parsedDate = new Date(date);
+        const formattedDate = !isNaN(parsedDate)
+          ? parsedDate.getFullYear() + '-' +
+            String(parsedDate.getMonth() + 1).padStart(2, '0') + '-' +
+            String(parsedDate.getDate()).padStart(2, '0') + ' 04:00:00 +0100'
+          : date;
         const type = cells[3].textContent.trim();
         const name = cells[2].textContent.replace('📋', '').replace('✅', '').trim();
         const amount = cells[7].textContent.trim().replace(/[€EUR\s]/g, '');
         if (name && name !== '⏳' && name !== '—' && name !== '❌' && name !== '⏰') {
-          csvRows.push('"' + date + '","' + type + '","' + name + '","' + amount + '"');
+          csvRows.push(formattedDate + ',' + type + ',' + name + ',' + amount);
         }
       });
 
