@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Lexware Zinsen - TaxAdvisor
 // @namespace    tax-advisor
-// @version      0.3.0
+// @version      0.4.0
 // @description  Adds "Calculate Zinsen" button to Lexware Kontoauszug (AccountStatement) page
 // @match        https://app.lexware.de/*
 // @grant        none
@@ -14,7 +14,7 @@
   const BUTTON_LABEL = 'Calculate Zinsen';
   const BUTTON_COLOR = '#1565c0';
   const BUTTON_HOVER_COLOR = '#0d47a1';
-  const VERSION = '0.3.0';
+  const VERSION = '0.4.0';
 
   console.log('[TaxAdvisor] Zinsen script v' + VERSION + ' loaded');
 
@@ -112,7 +112,7 @@
   const CONCURRENCY = 4;
   const BLINK_MS = 400;
 
-  const COLUMNS = ['Bezahlt am', 'Tage', 'Überfällig', 'Zinsen'];
+  const COLUMNS = ['Fälligkeit', 'Bezahlt am', 'Tage', 'Überfällig', 'Zinsen'];
   const CELL_CLASS = 'tax-advisor-zinsen-cell';
   const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -156,7 +156,7 @@
     };
   }
 
-  // Add our 4 columns at the end of the table (header, booking rows, Saldo/Summe rows)
+  // Add our columns at the end of the table (header, booking rows, Saldo/Summe rows)
   function addColumns() {
     document.querySelectorAll(`.${CELL_CLASS}`).forEach((el) => el.remove()); // re-run: start clean
     const table = getItemRows()[0]?.closest('table');
@@ -203,10 +203,13 @@
     const worker = async () => {
       while (next < rows.length) {
         const tr = rows[next++];
-        const [paidCell, daysCell, overdueCell, interestCell] = ourCells(tr);
+        const [dueCell, paidCell, daysCell, overdueCell, interestCell] = ourCells(tr);
         const receipt = cellText(tr, receiptCol);
         const voucherDate = parseDate(cellText(tr, dateCol));
         const netAmount = parseEuro(cellText(tr, creditCol));
+        // Fälligkeit: Belegdatum + payment term
+        const dueAt = voucherDate && new Date(voucherDate.getFullYear(), voucherDate.getMonth(), voucherDate.getDate() + PAYMENT_TERM_DAYS);
+        dueCell.textContent = formatDate(dueAt);
         paidCell.textContent = '⏳';
         try {
           const pay = await fetchPayment(recordIdOf(tr));
@@ -214,7 +217,7 @@
             // Not (fully) paid yet: leave the cells empty
             paidCell.textContent = '';
             const note = pay.error || (pay.partPayments ? `${pay.partPayments} Teilzahlung(en), noch nicht ausgeglichen` : 'Noch nicht bezahlt');
-            results.push({ status: pay.error ? 'error' : 'open', receipt, customer: pay.customer, voucherDate, netAmount, paidAt: null, interest: 0, note });
+            results.push({ status: pay.error ? 'error' : 'open', receipt, customer: pay.customer, voucherDate, dueAt, netAmount, paidAt: null, interest: 0, note });
             continue;
           }
           const days = daysBetween(voucherDate, pay.paidAt);
@@ -231,12 +234,12 @@
             interestCell.style.fontWeight = '600';
             flash(interestCell);
           }
-          results.push({ status: 'paid', receipt, customer: pay.customer, voucherDate, netAmount, base, paidAt: pay.paidAt, days, overdue, interest });
+          results.push({ status: 'paid', receipt, customer: pay.customer, voucherDate, dueAt, netAmount, base, paidAt: pay.paidAt, days, overdue, interest });
         } catch (e) {
           paidCell.textContent = '❌';
           paidCell.title = String(e.message || e);
           console.log(`[TaxAdvisor] Zinsen: ${receipt}: ${e.message || e}`);
-          results.push({ status: 'error', receipt, customer: '', voucherDate, netAmount, paidAt: null, interest: 0, note: `Fehler: ${e.message || e}` });
+          results.push({ status: 'error', receipt, customer: '', voucherDate, dueAt, netAmount, paidAt: null, interest: 0, note: `Fehler: ${e.message || e}` });
         }
       }
     };
@@ -246,10 +249,11 @@
     const total = Math.round(results.reduce((sum, r) => sum + r.interest, 0) * 100) / 100;
     const sumRow = Array.from(table.querySelectorAll('tbody tr')).find((tr) => /summe umsätze/i.test(tr.textContent));
     const sumCells = sumRow ? ourCells(sumRow) : [];
-    if (sumCells[3]) {
-      sumCells[3].textContent = formatEuro(total);
-      sumCells[3].style.fontWeight = '700';
-      flash(sumCells[3]);
+    const sumCell = sumCells[COLUMNS.indexOf('Zinsen')];
+    if (sumCell) {
+      sumCell.textContent = formatEuro(total);
+      sumCell.style.fontWeight = '700';
+      flash(sumCell);
     }
 
     // Table order (workers finish in any order)
@@ -288,9 +292,9 @@
   function exportCsv(report) {
     const num = (n) => (typeof n === 'number' ? n.toFixed(2).replace('.', ',') : '');
     const csv = toCsv(
-      ['Belegdatum', 'Beleg', 'Kunde', 'Bezahlt am', 'Tage', 'Überfällig', 'Zinsen'],
+      ['Belegdatum', 'Beleg', 'Kunde', 'Haben', 'Fälligkeit', 'Bezahlt am', 'Tage', 'Überfällig', 'Zinsen'],
       report.results.map((r) => [
-        formatDate(r.voucherDate), r.receipt, r.customer, formatDate(r.paidAt),
+        formatDate(r.voucherDate), r.receipt, r.customer, num(r.netAmount), formatDate(r.dueAt), formatDate(r.paidAt),
         r.status === 'paid' ? r.days : '', r.status === 'paid' ? r.overdue : '', r.status === 'paid' ? num(r.interest) : '',
       ]),
     );
